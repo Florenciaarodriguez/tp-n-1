@@ -1,0 +1,376 @@
+---
+title: "TRABAJO PRÁCTICO N°1"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Ejercicio 1:
+
+Leo los datos
+
+```{r}
+library(tidyverse)
+
+datos <- read_csv2("elcuy.csv")
+```
+
+Veamos las columnas y las primeras filas
+
+```{r}
+glimpse(datos)
+head(datos)
+```
+
+Calculo las frecuencias:
+
+```{r}
+datos %>%
+  count(Especie, Pastoreo, emergencia)
+ 
+#Guardo la tabla:
+frecuencias <- datos %>%
+  count(Especie, Pastoreo, emergencia)
+```
+
+2\) ordeno de mayor a menor según frecuencia de emergencia registrada
+
+```{r}
+datos %>%
+  count(Especie, Pastoreo, emergencia) %>%
+  arrange(desc(n))
+
+
+```
+
+3\) Agregar fecha a la tabla de frecuencia
+
+```{r}
+datos_fecha <- datos %>%
+  mutate(
+    fecha = as.Date(
+      paste0(2000 + Año, "-", mes, "-01")
+    )
+  )
+
+datos_fecha %>%
+  count(Especie, Pastoreo, fecha)
+```
+
+4\) Crear otra variable: logaritmo de emergencia para reducir el sesgo
+
+```{r}
+datos <- datos %>%
+  mutate(log_emergencia = log(emergencia))
+```
+
+5\) Calcular la media, desviación estándar, coeficiente de variación de la emergencia por especie de acuerdo con el momento del año.
+
+```{r}
+datos %>%
+  group_by(Especie, mes) %>%
+  summarise(
+    media = mean(emergencia, na.rm = TRUE),
+    desvio_estandar = sd(emergencia, na.rm = TRUE),
+    coef_variacion = (desvio_estandar / media) * 100
+  )
+```
+
+6\) Realice un gráfico que permita visualizar la emergencia de cada especie. A partir de la observación, ¿considera que existen diferencias según el tipo de pastoreo?
+
+¿brotan más o menos con pastoreo o no?
+
+```{r}
+datos %>%
+  group_by(Especie, Pastoreo) %>%
+  summarise(
+    emergencia_media = mean(emergencia, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = Especie, y = emergencia_media, fill = Pastoreo)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Emergencia de las especies según el tipo de pastoreo",
+    x = "Especie",
+    y = "Emergencia promedio",
+    fill = "Tipo de pastoreo"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+***Conclusión:** Podemos visualizar que las especies que más brote poseen son Gilia sp y Ran un culacea sp con y sin pastoreo. Sin embargo, ambas crecen más con pastoreo que sin pastoreo.*
+
+7)  En la base de datos hay especies no identificadas, hay que escribirlas como no identificadas y filtrarlas.
+
+```{r}
+library(stringr)
+
+datos <- datos %>%
+  mutate(
+    Especie = if_else(
+      str_detect(Especie, "^Sp[0-9]+$"),
+      "No identificadas",
+      Especie
+    )
+  )
+
+
+datos_filtrados <- datos %>%
+  filter(Especie != "No identificadas")
+```
+
+8\) Realizar un gráfico **de las especies más frecuentes** que muestre los valores medios de emergencia por mes, año y tipo de pastoreo. ¿Concuerda el patrón observado con la descripción teorica del enunciado?
+
+```{r}
+#primero vamos a encontrar las especies más frecuentes. 
+datos_filtrados %>%
+  count(Especie, sort = TRUE)
+
+#las 5 especies más frecuentes:
+especies_frecuentes <- datos_filtrados %>%
+  count(Especie, sort = TRUE) %>%
+  slice_head(n = 5)
+
+#media emergente
+datos_filtrados %>%
+  semi_join(especies_frecuentes, by = "Especie") %>%
+  group_by(Especie, mes, Año, Pastoreo) %>%
+  summarise(
+    emergencia_media = mean(emergencia, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = mes, y = emergencia_media, 
+             color = Pastoreo, group = Pastoreo)) +
+  geom_line() +
+  geom_point() +
+  facet_grid(Especie ~ Año) +
+  labs(
+    title = "Emergencia media de las especies más frecuentes",
+    x = "Mes",
+    y = "Emergencia media",
+    color = "Tipo de pastoreo"
+  ) +
+  theme_minimal()
+```
+
+### Cómo leer el gráfico?
+
+- **Eje X:** mes.
+
+- **Eje Y:** emergencia media.
+
+- **Líneas:** tipo de pastoreo.
+
+- **Filas:** especies.
+
+- **Columnas:** año.
+
+Así podés observar si la emergencia cambia a lo largo del año y si el comportamiento es diferente entre **pastoreo** y **sin pastoreo**.
+
+### Interpretación del gráfico
+
+Se observa que **la emergencia varía según la especie, el año, el mes y el tipo de pastoreo**.
+
+En varias especies se observa una diferencia entre los tratamientos. Por ejemplo:
+
+- **Gilia sp:** presenta una emergencia claramente mayor con **pastoreo** que sin pastoreo, especialmente en 2013 y 2014.
+
+- **Ranunculacea:** también muestra valores mayores con **pastoreo**, particularmente al comienzo del período observado.
+
+- **Pappostipa:** las diferencias entre tratamientos son menores y el comportamiento cambia según el año.
+
+- **delachile:** presenta valores relativamente bajos y diferencias pequeñas entre los tratamientos.
+
+Además, en varias especies se observa una **disminución de la emergencia hacia los meses posteriores**, aunque el comportamiento no es igual para todas las especies.
+
+**EJERCICIO N° 2)** Encuesta para estudiar los habitos alimenticios y el consumo de alcohol en estudiantes de nivel secundario.
+
+1\) Importamos el archivo y seleccionamos las columnas 8 a 11 y 47 a 51.
+
+```{r}
+#leo los datos
+datos <- read_csv2("encuesta.csv")
+
+#selecciono las columnas 8 a 11 y 47 a 51. 
+datos_seleccionados <- datos %>%
+  select(8:11, 47:51)
+
+#convertirlo a dataframe
+datos_df <- as.data.frame(datos_seleccionados)
+```
+
+Las diferencias que veo en una y otra tabla es que:
+
+- Tibble: muestra los datos de forma ordenada y resumida. No muestra todos los datos. También, aparecen los tipos de datos en las columnas, debajo de los nombres (si es caracter, o numeric, etc.)
+
+- Data.frame: muestra los datos de una forma más extensa y no muestra los tipos de datos.
+
+2\) Filtrar a los estudiantes que responden SI a ¿consumis alcohol?
+
+Calcular el % que representan sobre el total. Luego, desagregar por sexo y contabilizar las frec. absolutas y relativas.
+
+```{r}
+#total de estudiantes
+total<-nrow(datos)
+
+#filtrar quienes responden afirmativamente 
+alcohol_si<-datos%>% 
+  filter(consumiste_alcohol == "Sí")
+
+#Calcular el %
+porcentaje<-nrow(alcohol_si)/total*100
+porcentaje
+
+#desagregar por sexo para obtener la frec. absoluta
+alcohol_si %>%
+  count(Sexo)
+
+#frecuencia relativa
+alcohol_si %>%
+  count(Sexo) %>%
+  mutate(porcentaje=n/sum(n)*100)
+
+
+```
+
+Respuesta: Se visualiza que hay 260 hombres que contestaron que si, mientras que 237 mujeres contestaron que si.
+
+3\) Para aquellos que respondieron que si, crear un histograma de la variable edad y compárelo segregando por sexo.
+
+```{r}
+#filtrar quienes responden afirmativamente 
+alcohol_si<-datos%>% 
+  filter(consumiste_alcohol == "Sí")
+
+#histograma
+ggplot(alcohol_si, aes(x=Edad))+
+  geom_histogram(binwidth=1)+
+  labs(
+    title= "Distribución de la edad de estudiantes que consumen alcohol",
+    x="Edad",
+    y ="Frecuencia"
+  )
+
+#comparar por sexo
+ggplot(alcohol_si, aes(x = Edad)) +
+  geom_histogram(binwidth = 1) +
+  facet_wrap(~Sexo) +
+  labs(
+    title = "Distribución de la edad según sexo",
+    x = "Edad",
+    y = "Frecuencia"
+  )
+```
+
+En el gráfico de frecuencia vs Edad, podemos ver que los que más consumen alcohol son entre 16 y 18 años.
+
+En el gráfico que diferencia femenino y masculino, podemos visualizar que presentan una distribución similar, concentrándose principalmente entre los 14 y 18. En ambos, las mayores frecuencias se encuentran entre los 15 y 17 años. Sin embargo, el hombre tiene mayor concentración en todas las edades con respecto a la mujer, pero además, tiene una mayor concentración entre 16 y 17 años, mientras que la mujer se concentra más entre los 15 y 16 años. Otra diferencia, es que los hombre presentan algunos casos en edades mayores, llegando hasta los 20 años, mientras que las mujeres hay pocos casos de 19 años.
+
+4\) Calcular los % de respuesta afirmativa "Tuviste un exceso de alcohol?".
+
+i- Crear una nueva columna mediante un condicional de tidyverse que clasifica a los estudiantes en básico (1°,2° y 3°) y superior (4°, 5° y 6°).
+
+```{r}
+#Sacamos el % de las personas que han tenido exceso
+datos %>%
+  summarise(
+    porcentaje = mean(tuviste_un_exceso_de_alcohol == "Sí", na.rm = TRUE) * 100
+  )
+
+#Creamos la variable Básico y Superior
+datos <- datos %>%
+  mutate(
+    nivel = case_when(
+      Curso %in% c(1, 2, 3) ~ "Básico",
+      Curso %in% c(4, 5, 6) ~ "Superior",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+ii- Calcular el % de estudiantes con respuesta afirmativa según sexo y nivel educativo
+
+```{r}
+resultados <- datos %>%
+  group_by(Sexo, nivel) %>%
+  summarise(
+    porcentaje = mean(tuviste_un_exceso_de_alcohol == "Sí", na.rm = TRUE) * 100,
+    .groups = "drop"
+  )
+
+resultados
+
+```
+
+iii- Elaborar un gráfico de barras para representar los resultdos obtenidos.
+
+```{r}
+ggplot(resultados, aes(x = Sexo, y = porcentaje, fill = nivel)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Porcentaje de estudiantes que tuvieron un exceso de alcohol",
+    x = "Sexo",
+    y = "Porcentaje",
+    fill = "Nivel educativo"
+  )
+
+```
+
+vemos que hay más % de mujeres que han tenido un exceso de alcohol que hombres.
+
+5\) Para las restantes variables de consumo, calcular la cantidad de respuestas afirmativas segregandas por sexo.
+
+```{r}
+#Cantidad de respuestas afirmativas por sexo
+table(datos$Sexo, datos$`consumiste_alcohol_este_anio`)
+table(datos$Sexo, datos$`consumiste_alcohol_este_mes`)
+table(datos$Sexo, datos$`consumiste_alcohol_esta_semana`)
+table(datos$Sexo, datos$`tuviste_un_exceso_de_alcohol`)
+
+```
+
+6\)
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+datos_lollipop <- datos %>%
+  pivot_longer(
+    cols = c(
+      `consumiste_alcohol_este_anio`,
+      `consumiste_alcohol_este_mes`,
+      `consumiste_alcohol_esta_semana`,
+      `tuviste_un_exceso_de_alcohol`
+    ),
+    names_to = "Consumo",
+    values_to = "Respuesta"
+  ) %>%
+  filter(Respuesta == "Sí") %>%
+  count(Consumo, Sexo)
+
+#gráfico
+ggplot(datos_lollipop, aes(x = n, y = Consumo, color = Sexo)) +
+  geom_segment(
+    aes(x = 0, xend = n, y = Consumo, yend = Consumo)
+  ) +
+  geom_point(size = 4) +
+  labs(
+    title = "Respuestas afirmativas sobre consumo de alcohol según sexo",
+    x = "Cantidad de respuestas afirmativas",
+    y = "Variable de consumo",
+    color = "Sexo"
+  ) +
+  theme_minimal()
+```
+
+**conclusión:** los puntos de cada variable, corresponden a los dos sexos. Se visualiza claramente, que en cada uno de los consumos, hay más % de masculinos que de femeninos, salvo en exceso de alcohol.
+
+**EJERCICIO 5)**
+
+Utilizando, ahora, los datos de telefonía movil para el analisis economico del ingreso por medio por usuario (Average Revenue Per User, ARPU), considere las siguientes variables:
